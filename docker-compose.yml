@@ -1,0 +1,117 @@
+version: '3'
+services:
+
+# News Scraper in Java
+  odra-scraper-java:
+    image: ddmr/odra-test:latest
+    restart: always
+    networks:
+      - backend
+
+# Twitter Scraper
+  odra-twitter-scraper:
+    image: ddmr/odra-twitter-scraper:latest
+    restart: always
+    environment:
+      - SCRAPER_CONTROLLER_URL=http://odra-scraper-controller:8080
+    networks:
+      - backend
+
+
+#API Gateway
+  odra-gateway:
+     image: ddmr/odra-gateway:latest
+     restart: always
+     ports:
+      - "8888:8888"
+     environment:
+       - ZUUL_ROUTES_SCRAPERCONTROLLER_URL=http://odra-scraper-controller:8080
+       - ZUUL_ROUTES_SCRAPERCONTROLLER_PATH=/scraper-controller/**
+       - SPRING_DATASOURCE_URL=jdbc:mysql://odra-gw-db:3306/odra?useUnicode=true&serverTimezone=UTC&useSSL=false&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&autoReconnect=true
+       - SPRING_DATASOURCE_USERNAME=odra
+       - SPRING_DATASOURCE_PASSWORD=odra
+       - SPRING_DATASOURCE_DRIVER-CLASS-NAME=com.mysql.cj.jdbc.Driver
+       - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQL5InnoDBDialect
+       - LOGGING_LEVEL_ORG_HIBERNATE_SQL=ERROR
+        ###  Change default PW/KEY in production!! ###
+       - APP_ADMIN_PW=secret
+       - APP_JWTSECRET=JWTsuperSecretKey
+     depends_on:
+       - "odra-gw-db"
+     networks:
+       - backend
+
+#Gateway Database
+  odra-gw-db:
+    image: mysql:latest
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    restart: always
+    environment:
+       MYSQL_DATABASE: 'odra'
+       MYSQL_USER: 'odra'
+       MYSQL_PASSWORD: 'odra'
+       MYSQL_ROOT_PASSWORD: 'odra'
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - odra-gw-db-data:/var/lib/mysql
+    networks:
+      - backend
+
+#Scraper Controller Database
+  odra-sc-db:
+    image: mysql:latest
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
+    restart: always
+    environment:
+       MYSQL_DATABASE: 'odra'
+       MYSQL_USER: 'odra'
+       MYSQL_PASSWORD: 'odra'
+       MYSQL_ROOT_PASSWORD: 'odra'
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - odra-sc-db-data:/var/lib/mysql
+    networks:
+      - backend
+
+#Scraper Controller
+  odra-scraper-controller:
+    image: ddmr/odra-scraper-controller:latest
+    restart: always
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://odra-sc-db:3306/odra?useUnicode=true&serverTimezone=UTC&useSSL=false&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&autoReconnect=true
+      - SPRING_DATASOURCE_USERNAME=odra
+      - SPRING_DATASOURCE_PASSWORD=odra
+      - SPRING_DATASOURCE_DRIVER-CLASS-NAME=com.mysql.cj.jdbc.Driver
+      - SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT=org.hibernate.dialect.MySQL5InnoDBDialect
+      - LOGGING_LEVEL_ORG_HIBERNATE_SQL=ERROR
+      - SCRAPER_URLS=   http://odra-scraper-java:8081/pikio
+      - SCRAPER_NAMES=  pikio
+      - SCRAPER_INTERVALL=3600000
+      - TWITTER_SCRAPER_URL=http://odra-twitter-scraper:8081
+    depends_on:
+      - "odra-sc-db"
+      - "odra-scraper-java"
+      - "odra-twitter-scraper"
+    networks:
+      - backend
+
+#Frontend Client
+  odra-react-client:
+    image: ddmr/odra-react-client:latest
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+          - "odra-scraper-controller"
+    networks:
+      - frontend
+
+volumes:
+  odra-sc-db-data:
+  odra-gw-db-data:
+
+networks:
+  backend:
+  frontend:
